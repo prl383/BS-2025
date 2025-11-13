@@ -1,46 +1,70 @@
-\section{Materiales y métodos}
-\textbf{4. Materiales y Métodos}
-\textbf{4.1 Materiales}
+\section{Materiales y Métodos}
+
+\subsection{4.1 Materiales}
 
 El análisis se basó en información procedente de bases de datos biomédicas de referencia.
-Se seleccionó el término \textbf{HP:0002344 – Progressive neurologic deterioration de la Human Phenotype Ontology (HPO)} como punto de partida, recopilando los genes asociados a este fenotipo.
-La información genética se contrastó con OMIM y GeneCards para confirmar la relación gen-enfermedad y ampliar la evidencia funcional.
-Las interacciones entre las proteínas codificadas por dichos genes se obtuvieron mediante STRINGdb (versión 12.0), considerando únicamente interacciones de alta confianza (combined score mayor o igual a 0.7) en el organismo Homo sapiens.
+Se seleccionó el término \textbf{HP:0002344 – Progressive neurologic deterioration} de la Human Phenotype Ontology (HPO) \cite{HPO_term_HP0002344,HPO2025} como punto de partida, recopilando los genes asociados a este fenotipo.
+La relación gen–enfermedad se contrastó con OMIM \cite{Amberger2011} y GeneCards \cite{stelzer2016genecards}, lo que permitió confirmar y ampliar la evidencia disponible sobre cada gen.
 
-El procesamiento y análisis de redes se llevaron a cabo en R (versión 4.3.2), utilizando los paquetes igraph, tidygraph, ggraph y linkcomm.
-Todas las rutinas y resultados se encuentran disponibles en el repositorio de GitHub del proyecto para garantizar la reproducibilidad del estudio.
+Las interacciones entre las proteínas codificadas por dichos genes se obtuvieron mediante STRINGdb (versión 12.0) \cite{snel2000string}, considerando únicamente interacciones de alta confianza (combined score $\geq$ 0.7) en \textit{Homo sapiens}.
 
-\textbf{4.2 Metodología
-\textbf{4.2.1 Recopilación de genes y construcción de la red}}
+El procesamiento y análisis de redes se realizaron en R (versión 4.3.2), empleando los paquetes \texttt{igraph}, \texttt{tidygraph}, \texttt{ggraph} y \texttt{linkcomm} \cite{igraph2006,tidygraph2020,ggraph2017,linkcomm2012}.
+Todos los scripts, tablas y visualizaciones se encuentran disponibles en el repositorio de GitHub del proyecto, garantizando la reproducibilidad del estudio.
 
-A partir del término HP:0002344 se descargó la lista de genes relacionados con el fenotipo desde HPO.
-Tras eliminar duplicados y verificar la validez de las asociaciones mediante OMIM y GeneCards, se generó una lista depurada de genes candidatos.
-Estos genes se introdujeron en STRINGdb para obtener la red de interacciones proteína–proteína (PPI), incluyendo únicamente conexiones respaldadas por evidencia experimental o de bases de datos consolidadas.
-La red se exportó y procesó en R, donde se transformó en un objeto igraph para su análisis estructural.
+\subsection{4.2 Metodología}
 
-\textbf{4.2.2 Análisis estructural de la red}
+\subsubsection{4.2.0 Flujo de trabajo general}
 
-Se caracterizó la topología de la red mediante medidas de conectividad y centralidad.
-El grado permitió identificar genes con un gran número de interacciones (posibles “hubs”), mientras que las medidas de centralidad de intermediación y cercanía ayudaron a localizar genes con un papel relevante en la comunicación entre módulos.
-También se calculó el coeficiente de agrupamiento, que refleja la tendencia de los genes a formar clústeres, y la modularidad global, que evalúa el grado de organización de la red en comunidades funcionales.
-Estas métricas proporcionaron una visión general del nivel de interconexión y jerarquía del sistema.
+El procedimiento seguido en el estudio puede resumirse en las siguientes etapas:
 
-\textbf{4.2.3 Identificación de comunidades funcionales}
+\begin{enumerate}
+	\item Selección del fenotipo HP:0002344 en HPO.
+	\item Extracción de genes asociados al fenotipo.
+	\item Validación de las asociaciones gen–enfermedad mediante OMIM y GeneCards.
+	\item Obtención de interacciones proteína–proteína (PPI) en STRINGdb.
+	\item Construcción y depuración de la red en R.
+	\item Cálculo de métricas estructurales de la red.
+	\item Identificación de comunidades mediante Louvain, Walktrap y linkcomm.
+	\item Análisis detallado de los genes de interés: \textit{MECP2}, \textit{IARS2} y \textit{GRN}.
+	\item Enriquecimiento funcional de los módulos identificados (GO y KEGG).
+	\item Interpretación integrada de resultados.
+\end{enumerate}
 
-Para detectar grupos de genes con funciones relacionadas se aplicaron los algoritmos Louvain y Walktrap, disponibles en igraph.
-Ambos métodos agrupan nodos con alta densidad de conexiones internas, lo que facilita la detección de posibles módulos biológicos.
-Adicionalmente, se empleó el enfoque de comunidades solapadas mediante el paquete linkcomm, permitiendo que un mismo gen participara en varios módulos cuando intervenía en diferentes procesos biológicos.
-Cada comunidad se evaluó según su tamaño, cohesión y la presencia de genes asociados a enfermedades relevantes.
+\subsubsection{4.2.1 Recopilación de genes y construcción de la red}
 
-\textbf{4.2.4 Análisis de genes de interés}
+A partir del término HP:0002344 se descargó la lista de genes relacionados desde HPO \cite{HPO_term_HP0002344}.
+Tras eliminar duplicados, se verificó la validez de las asociaciones gen–enfermedad mediante OMIM \cite{Amberger2011} y GeneCards \cite{stelzer2016genecards}, obteniendo un conjunto depurado de genes candidatos.
 
-Se examinaron de forma específica los genes \textbf{MECP2}, \textbf{IARS2} y \textbf{GRN}, seleccionados por su implicación directa en enfermedades representativas del fenotipo.
-Para cada uno se generó una subred con sus interacciones más próximas, destacando su conectividad y la relación con otros nodos relevantes dentro de la red global.
-Las visualizaciones se realizaron con ggraph, resaltando los módulos a los que pertenecían y su posible papel como elementos reguladores.
+Estos genes se introdujeron en STRINGdb (v12.0) \cite{snel2000string} para obtener la red de interacciones proteína–proteína (PPI), restringiéndonos a interacciones con evidencia experimental o provenientes de bases de datos curadas.
+La red se exportó y procesó en R, transformándose en un objeto \texttt{igraph} para su análisis estructural.
 
-\textbf{4.2.5 Enriquecimiento funcional}
+\subsubsection{4.2.2 Análisis estructural de la red}
 
-Las comunidades más relevantes se sometieron a análisis de enriquecimiento funcional mediante las herramientas integradas en STRINGdb.
-Se evaluaron las categorías de Gene Ontology (procesos biológicos, funciones moleculares y componentes celulares) y las rutas KEGG.
-Los términos se consideraron significativos cuando presentaron un valor de p ajustado menor que \textbf{0.05} (corrección de Benjamini–Hochberg).
-Este análisis permitió relacionar los módulos detectados con procesos neuronales y rutas metabólicas asociadas al deterioro neurológico progresivo.
+Se caracterizó la topología global mediante métricas estándar de redes.
+El \textit{grado} permitió identificar genes altamente conectados (posibles hubs), mientras que las centralidades de intermediación y cercanía ayudaron a detectar nodos clave en la comunicación entre módulos.
+
+Se calculó el coeficiente de agrupamiento para evaluar la tendencia de los nodos a formar clústeres, y la modularidad global para estimar el grado de organización de la red en comunidades funcionales.
+
+\subsubsection{4.2.3 Identificación de comunidades funcionales}
+
+La detección de comunidades se realizó mediante dos algoritmos ampliamente utilizados: Louvain \cite{blondel2008louvain} y Walktrap \cite{pons2005walktrap}, implementados en \texttt{igraph}.
+Además, se aplicó el enfoque de comunidades solapadas mediante el paquete \texttt{linkcomm} \cite{linkcomm2012}, permitiendo que un mismo gen pudiera participar en distintos módulos cuando intervenía en procesos independientes.
+
+Cada comunidad se evaluó considerando su cohesión, su tamaño y la presencia de genes previamente relacionados con enfermedades neurológicas.
+
+\subsubsection{4.2.4 Análisis de genes de interés}
+
+Se estudiaron en mayor profundidad los genes \textbf{MECP2}, \textbf{IARS2} y \textbf{GRN}, seleccionados por su relevancia clínica en patologías asociadas al deterioro neurológico progresivo.
+
+El gen \textit{MECP2} está implicado en el síndrome de Rett \cite{Ehrhart2016_Rett_MECP2_pathways} y en el síndrome por duplicación MECP2 \cite{dePalma2012_eating_spasms_MECP2_dup}.
+El gen \textit{IARS2} se ha asociado a síndrome de Leigh con deficiencia combinada en fosforilación oxidativa \cite{Dong2024_IARS2_Leigh}.
+Por último, \textit{GRN} está implicado en la degeneración lobar frontotemporal \cite{Karamysheva2019_Granulin_FTLD}.
+
+Para cada gen se generó una subred local con sus interacciones más próximas, visualizada mediante \texttt{ggraph}, destacando su conectividad y su relación con nodos relevantes dentro de la red global.
+
+\subsubsection{4.2.5 Enriquecimiento funcional}
+
+Finalmente, las comunidades más representativas se sometieron a análisis de enriquecimiento funcional mediante las herramientas integradas en STRINGdb.
+Se evaluaron las categorías de Gene Ontology (procesos biológicos, funciones moleculares y componentes celulares) y las rutas KEGG, considerando significativos los términos con p ajustado < 0.05 (corrección Benjamini–Hochberg).
+
+Este análisis permitió relacionar los módulos detectados con procesos neuronales y rutas metabólicas asociadas al deterioro neurológico progresivo, en consonancia con los mecanismos descritos en la literatura biomédica \cite{Kelser2024,Gao2008}.
