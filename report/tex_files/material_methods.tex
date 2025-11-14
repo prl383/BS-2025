@@ -4,12 +4,12 @@
 
 El análisis se basó en información procedente de bases de datos biomédicas de referencia.
 Se seleccionó el término \textbf{HP:0002344 – Progressive neurologic deterioration} de la Human Phenotype Ontology (HPO) \cite{HPO2025} como punto de partida, recopilando los genes asociados a este fenotipo.
-La relación gen–enfermedad se contrastó con OMIM \cite{Amberger2011} y GeneCards \cite{GeneCards}, lo que permitió confirmar y ampliar la evidencia disponible sobre cada gen.
+La relación gen--enfermedad se contrastó con OMIM \cite{Amberger2011} y GeneCards \cite{GeneCards}, lo que permitió confirmar y ampliar la evidencia disponible sobre cada gen.
 
 Las interacciones entre las proteínas codificadas por dichos genes se obtuvieron mediante STRINGdb (versión 12.0) \cite{STRING}, considerando únicamente interacciones de alta confianza (combined score $\geq$ 0.7) en \textit{Homo sapiens}.
 
-El procesamiento y análisis de redes se realizaron en R (versión 4.3.2), empleando los paquetes \texttt{igraph}, \texttt{tidygraph}, \texttt{ggraph} y \texttt{linkcomm} 
-\cite{igraph,tidygraph,ggraph,Kalinka2011_linkcomm}.
+El procesamiento y análisis de redes se realizaron en R (versión 4.3.2), empleando los paquetes \texttt{igraph}, \texttt{tidygraph}, \texttt{ggraph} y \texttt{linkcomm} \cite{igraph,tidygraph,ggraph,Kalinka2011_linkcomm}.
+Adicionalmente, se utilizaron los paquetes \texttt{clusterProfiler}, \texttt{enrichplot} y \texttt{org.Hs.eg.db} para el análisis de enriquecimiento funcional.
 Todos los scripts, tablas y visualizaciones se encuentran disponibles en el repositorio de GitHub del proyecto, garantizando la reproducibilidad del estudio.
 
 \subsection{Metodología}
@@ -20,12 +20,12 @@ El procedimiento seguido en el estudio puede resumirse en las siguientes etapas:
 
 \begin{enumerate}
 	\item Selección del fenotipo HP:0002344 en HPO.
-	\item Extracción de genes asociados al fenotipo.
-	\item Validación de las asociaciones gen–enfermedad mediante OMIM y GeneCards.
-	\item Obtención de interacciones proteína–proteína (PPI) en STRINGdb.
+	\item Extracción de genes asociados al fenotipo mediante la API de HPO.
+	\item Validación de las asociaciones gen--enfermedad mediante OMIM y GeneCards.
+	\item Obtención de interacciones proteína--proteína (PPI) en STRINGdb.
 	\item Construcción y depuración de la red en R.
 	\item Cálculo de métricas estructurales de la red.
-	\item Identificación de comunidades mediante Louvain, Walktrap y linkcomm.
+	\item Identificación de comunidades mediante Louvain y Walktrap.
 	\item Análisis detallado de los genes de interés: \textit{MECP2}, \textit{IARS2} y \textit{GRN}.
 	\item Enriquecimiento funcional de los módulos identificados (GO y KEGG).
 	\item Interpretación integrada de resultados.
@@ -33,25 +33,53 @@ El procedimiento seguido en el estudio puede resumirse en las siguientes etapas:
 
 \subsubsection{Recopilación de genes y construcción de la red}
 
-A partir del término HP:0002344 se descargó la lista de genes relacionados desde HPO \cite{HPO_term_HP0002344}.
-Tras eliminar duplicados, se verificó la validez de las asociaciones gen–enfermedad mediante OMIM \cite{Amberger2011} y GeneCards \cite{GeneCards}, obteniendo un conjunto depurado de genes candidatos.
+A partir del término HP:0002344 se obtuvo programáticamente la lista de genes relacionados mediante la API REST de HPO \cite{HPO_term_HP0002344}.
+La consulta se realizó mediante el endpoint \texttt{https://ontology.jax.org/api/network/annotation/HP:0002344}, utilizando el paquete \texttt{httr} de R para realizar las peticiones HTTP y el paquete \texttt{jsonlite} para parsear las respuestas JSON.
 
-Estos genes se introdujeron en STRINGdb (v12.0) \cite{STRING} para obtener la red de interacciones proteína–proteína (PPI), restringiéndonos a interacciones con evidencia experimental o provenientes de bases de datos curadas.
-La red se exportó y procesó en R, transformándose en un objeto \texttt{igraph} para su análisis estructural.
+Tras eliminar duplicados y valores nulos, se verificó la validez de las asociaciones gen--enfermedad mediante OMIM \cite{Amberger2011} y GeneCards \cite{GeneCards}, obteniendo un conjunto depurado de genes candidatos.
+
+Estos genes se introdujeron en STRINGdb (v12.0) \cite{STRING} mediante el paquete de Bioconductor \texttt{STRINGdb}, estableciendo los siguientes parámetros:
+
+\begin{itemize}
+	\item \textbf{Organismo:} \textit{Homo sapiens} (NCBI Taxonomy ID: 9606)
+	\item \textbf{Umbral de confianza:} 0.7 (combined score $\geq$ 700), correspondiente a interacciones de alta confianza
+	\item \textbf{Versión de la base de datos:} 12.0
+\end{itemize}
+
+Para asegurar la calidad de las interacciones, únicamente se consideraron aquellas con evidencia experimental o provenientes de bases de datos curadas.
+El mapeo de los símbolos génicos a identificadores STRING se realizó mediante la función \texttt{map()} del paquete \texttt{STRINGdb}, eliminando los genes que no pudieron ser mapeados.
+
+La red resultante se construyó obteniendo todas las interacciones entre los genes mapeados mediante la función \texttt{get\_interactions()}.
+Los datos de interacción se transformaron en un objeto de clase \texttt{igraph} para su análisis estructural, estableciendo los nombres de genes como atributos de los vértices y los scores de confianza como pesos de las aristas.
 
 \subsubsection{Análisis estructural de la red}
 
-Se caracterizó la topología global mediante métricas estándar de redes.
-El \textit{grado} permitió identificar genes altamente conectados (posibles hubs), mientras que las centralidades de intermediación y cercanía ayudaron a detectar nodos clave en la comunicación entre módulos.
+Se caracterizó la topología global de la red mediante métricas estándar implementadas en el paquete \texttt{igraph}.
 
-Se calculó el coeficiente de agrupamiento para evaluar la tendencia de los nodos a formar clústeres, y la modularidad global para estimar el grado de organización de la red en comunidades funcionales.
+El \textbf{grado} de cada nodo (número de conexiones) se calculó mediante la función \texttt{degree()}, permitiendo identificar genes altamente conectados (posibles hubs).
+Las centralidades de \textbf{intermediación} (\textit{betweenness centrality}) y \textbf{cercanía} (\textit{closeness centrality}) se computaron mediante las funciones \texttt{betweenness()} y \texttt{closeness()} respectivamente, ayudando a detectar nodos clave en la comunicación entre módulos.
+
+Se calculó el \textbf{coeficiente de agrupamiento} (\textit{clustering coefficient}) local para cada nodo mediante \texttt{transitivity(type = "local")} y el coeficiente de agrupamiento global mediante \texttt{transitivity(type = "global")}, evaluando la tendencia de los nodos a formar clústeres densos.
+
+La \textbf{modularidad} global de la red se estimó mediante la función \texttt{modularity()}, cuantificando el grado de organización de la red en comunidades funcionales.
+Valores de modularidad superiores a 0.3 se consideran indicativos de estructura comunitaria significativa.
+
+Todas las métricas calculadas se consolidaron en una tabla única que incluye, para cada gen: símbolo génico, grado, betweenness, closeness, clustering coefficient y membresía comunitaria.
 
 \subsubsection{Identificación de comunidades funcionales}
 
-La detección de comunidades se realizó mediante dos algoritmos ampliamente utilizados: Louvain \cite{Louvain} y Walktrap \cite{Walktrap}, implementados en \texttt{igraph}.
-Además, se aplicó el enfoque de comunidades solapadas mediante el paquete \texttt{linkcomm} \cite{Kalinka2011_linkcomm}, permitiendo que un mismo gen pudiera participar en distintos módulos cuando intervenía en procesos independientes.
+La detección de comunidades se realizó mediante dos algoritmos complementarios implementados en \texttt{igraph}:
 
-Cada comunidad se evaluó considerando su cohesión, su tamaño y la presencia de genes previamente relacionados con enfermedades neurológicas.
+\begin{itemize}
+	\item \textbf{Algoritmo de Louvain} \cite{Louvain}: Método de optimización multinivel que maximiza la modularidad de la red mediante agrupación jerárquica. Se aplicó mediante la función \texttt{cluster\_louvain()}.
+	
+	\item \textbf{Algoritmo de Walktrap} \cite{Walktrap}: Método basado en caminatas aleatorias que identifica comunidades mediante la estructura de caminos cortos en la red. Se aplicó mediante \texttt{cluster\_walktrap()} con 4 pasos de caminata aleatoria.
+\end{itemize}
+
+Para cada partición resultante se calculó su modularidad y se analizó la distribución de tamaños de las comunidades.
+Los resultados de ambos métodos se compararon para evaluar la robustez de la estructura comunitaria detectada.
+
+Cada comunidad se evaluó considerando su cohesión interna, su tamaño y la presencia de genes previamente relacionados con enfermedades neurológicas progresivas en la literatura.
 
 \subsubsection{Análisis de genes de interés}
 
@@ -61,11 +89,41 @@ El gen \textit{MECP2} está implicado en el síndrome de Rett \cite{Ehrhart2016_
 El gen \textit{IARS2} se ha asociado a síndrome de Leigh con deficiencia combinada en fosforilación oxidativa \cite{Dong2024_IARS2_Leigh}.
 Por último, \textit{GRN} está implicado en la degeneración lobar frontotemporal \cite{Karamysheva2019_Granulin_FTLD}.
 
-Para cada gen se generó una subred local con sus interacciones más próximas, visualizada mediante \texttt{ggraph}, destacando su conectividad y su relación con nodos relevantes dentro de la red global.
+Para cada gen se verificó su presencia en la red y se extrajeron sus métricas topológicas (grado, centralidad de intermediación, coeficiente de agrupamiento).
+
+Se generaron subredes de vecindad inmediata para cada gen de interés mediante la función \texttt{make\_ego\_graph()}, incluyendo el gen focal y todos sus vecinos directos (orden 1).
+Estas subredes locales se visualizaron mediante \texttt{ggraph}, destacando la conectividad del gen focal y su relación con nodos relevantes dentro de la red global.
+Los nodos se colorearon según su pertenencia a comunidades y se dimensionaron proporcionalmente a su grado.
 
 \subsubsection{Enriquecimiento funcional}
 
-Finalmente, las comunidades más representativas se sometieron a análisis de enriquecimiento funcional mediante las herramientas integradas en STRINGdb.
-Se evaluaron las categorías de Gene Ontology (procesos biológicos, funciones moleculares y componentes celulares) y las rutas KEGG, considerando significativos los términos con p ajustado < 0.05 (corrección Benjamini–Hochberg).
+El análisis de enriquecimiento funcional se realizó mediante el paquete \texttt{clusterProfiler} de Bioconductor.
+
+Se evaluaron las categorías de \textbf{Gene Ontology} (GO) utilizando la función \texttt{enrichGO()}, con los siguientes parámetros:
+
+\begin{itemize}
+	\item \textbf{Base de datos de anotación:} \texttt{org.Hs.eg.db}
+	\item \textbf{Ontología:} Procesos biológicos (BP, \textit{Biological Process})
+	\item \textbf{Tipo de identificador:} SYMBOL
+	\item \textbf{Método de corrección:} Benjamini--Hochberg (BH)
+	\item \textbf{Umbral de significancia:} p ajustado < 0.05, q-valor < 0.2
+\end{itemize}
+
+El análisis se realizó tanto para la red completa como para cada comunidad individual que contenía al menos 5 genes.
+
+Para el análisis de rutas metabólicas \textbf{KEGG}, primero se convirtieron los símbolos génicos a identificadores Entrez mediante la función \texttt{bitr()}.
+Posteriormente se aplicó \texttt{enrichKEGG()} con los siguientes parámetros:
+
+\begin{itemize}
+	\item \textbf{Organismo:} \texttt{hsa} (\textit{Homo sapiens})
+	\item \textbf{Umbral de significancia:} p-valor < 0.05, q-valor < 0.2
+\end{itemize}
+
+Los resultados se visualizaron mediante gráficos de puntos (\textit{dotplots}) y gráficos de barras, generados con las funciones \texttt{dotplot()} y \texttt{barplot()} del paquete \texttt{enrichplot}.
 
 Este análisis permitió relacionar los módulos detectados con procesos neuronales y rutas metabólicas asociadas al deterioro neurológico progresivo, en consonancia con los mecanismos descritos en la literatura biomédica \cite{Kelser2024,Gao2008}.
+
+\subsubsection{Exportación y reproducibilidad}
+
+Todos los resultados, incluyendo métricas de nodos, resultados de enriquecimiento y la red en formatos GraphML y GML, se exportaron para su posterior análisis.
+El código completo del análisis se documentó en un notebook R Markdown y se encuentra disponible en el repositorio GitHub del proyecto, garantizando la total reproducibilidad del estudio.
