@@ -1,0 +1,1156 @@
+---
+title: "Análisis de redes génicas asociadas al fenotipo HP:0002344"
+subtitle: "Progressive neurologic deterioration"
+author: "Patricia Rodríguez Lidueña, Achraf Ousti El Moussati, Aissa Omar El Hammouti Chachoui, Hugo Salas Calderón"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    toc_float: yes
+    toc_depth: 3
+    theme: flatly
+    code_folding: "hide"
+---
+
+```{r setup, include=FALSE}
+# Limpia la memoria RAM
+rm(list = ls())
+
+# Configuración de knitr
+if(!require(knitr, quietly = TRUE)){
+  install.packages("knitr", dependencies=TRUE)
+  library("knitr")
+}
+
+# Paquete para tablas HTML bonitas
+if(!require(kableExtra, quietly = TRUE)){
+  install.packages("kableExtra", dependencies=TRUE)
+  library("kableExtra")
+}
+
+if(!require(DT, quietly = TRUE)){
+  install.packages("DT", dependencies=TRUE)
+  library("DT")
+}
+
+# Paquetes para acceso a APIs
+if (!require(httr, quietly = TRUE)) {
+  install.packages("httr", dependencies=TRUE)
+  library("httr")
+}
+
+if (!require(jsonlite, quietly = TRUE)) {
+  install.packages("jsonlite", dependencies=TRUE)
+  library("jsonlite")
+}
+
+if (!require(curl, quietly = TRUE)) {
+  install.packages("curl", dependencies=TRUE)
+  library("curl")
+}
+
+# Instalar BiocManager si no existe
+if (!require("BiocManager", quietly = TRUE)) {
+    install.packages("BiocManager")
+}
+
+# Paquetes de Bioconductor
+if (!require("STRINGdb", quietly = TRUE))
+    BiocManager::install("STRINGdb")
+
+# Instala ggtree desde GitHub para evitar error
+if (!requireNamespace("remotes", quietly = TRUE))
+    install.packages("remotes")
+
+remotes::install_github("YuLab-SMU/ggtree")
+
+if (!require("clusterProfiler", quietly = TRUE))
+    BiocManager::install("clusterProfiler")
+
+if (!require("org.Hs.eg.db", quietly = TRUE))
+    BiocManager::install("org.Hs.eg.db")
+
+if (!require("enrichplot", quietly = TRUE))
+    BiocManager::install("enrichplot")
+
+# Cargar paquetes de Bioconductor
+library(STRINGdb)
+library(ggtree)
+library(org.Hs.eg.db)
+library(enrichplot)
+library(clusterProfiler)
+
+# Paquete igraph para análisis de redes
+if (!require(igraph, quietly = TRUE)) {
+  install.packages("igraph", dependencies=TRUE)
+  library("igraph")
+}
+
+# Paquetes adicionales para visualización avanzada
+if (!require(tidygraph, quietly = TRUE)) {
+  install.packages("tidygraph", dependencies=TRUE)
+  library("tidygraph")
+}
+
+if (!require(ggraph, quietly = TRUE)) {
+  install.packages("ggraph", dependencies=TRUE)
+  library("ggraph")
+}
+
+# Configuración para la visualización
+knitr::opts_chunk$set(
+	echo = TRUE,
+	fig.align = "center",
+	fig.show = "hold",
+	message = FALSE,
+	warning = FALSE,
+	collapse = FALSE,
+	out.width = "80%"
+)
+
+# Información del sistema
+my_computer <- Sys.info()[c(1, 4, 5, 7)]
+```
+
+# Introducción
+
+Este documento presenta el flujo de trabajo completo para el análisis de redes génicas asociadas al fenotipo HP:0002344 – Progressive neurologic deterioration. El análisis integra información de múltiples bases de datos biomédicas (HPO, OMIM, GeneCards, STRINGdb) mediante técnicas de biología de sistemas para identificar mecanismos moleculares compartidos, genes candidatos y posibles dianas terapéuticas implicadas en la neurodegeneración progresiva.
+
+# Flujo de Trabajo {.tabset .tabset-fade .tabset-pills}
+
+## Obtención de Genes desde HPO
+
+### Descripción del fenotipo
+
+El término HPO:0002344 – Progressive neurologic deterioration describe el deterioro neurológico progresivo característico de múltiples enfermedades neurodegenerativas raras. Este fenotipo agrupa patologías con heterogeneidad genética pero con mecanismos de neurodegeneración potencialmente convergentes.
+
+### Acceso mediante API de HPO
+
+Utilizamos la API de la Human Phenotype Ontology para obtener programáticamente la lista de genes asociados al fenotipo HP:0002344.
+
+```{r get_genes_hpo}
+# ID del fenotipo HP:0002344
+hpo_id <- "HP:0002344"
+
+# Construcción de la URL de la API
+url <- paste0("https://ontology.jax.org/api/network/annotation/", hpo_id)
+
+# Realizar petición a la API
+response <- GET(url)
+
+# Parsear respuesta JSON
+data <- httr::content(response, "text")
+Encoding(data) <- "UTF-8"
+genes_hpo <- fromJSON(data)$genes
+```
+
+<div class="alert alert-success">
+<strong>✓ Total de genes obtenidos:</strong> `r nrow(genes_hpo)` genes asociados a HP:0002344
+</div>
+
+```{r show_genes_table}
+# Mostrar tabla con los primeros 10 genes
+head(genes_hpo, 10) %>%
+  kbl(caption = "Primeros 10 genes asociados al fenotipo HP:0002344") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"),
+                full_width = FALSE,
+                position = "center") %>%
+  row_spec(0, bold = TRUE, color = "white", background = "#3498db")
+```
+
+### Filtrado y validación de genes
+
+Se realiza un filtrado inicial para eliminar duplicados y se seleccionan los genes con mayor evidencia de asociación al fenotipo.
+
+```{r filter_genes}
+# Eliminar duplicados y valores NA
+genes_clean <- genes_hpo[!duplicated(genes_hpo$name) & !is.na(genes_hpo$name), ]
+
+# Crear lista de genes para análisis posterior
+gene_list <- genes_clean$name
+```
+
+<div class="alert alert-info">
+<strong> Genes únicos tras filtrado:</strong> `r length(gene_list)` genes
+</div>
+
+```{r show_filtered_genes}
+# Mostrar primeros 20 genes
+data.frame(
+  Index = 1:min(20, length(gene_list)),
+  Gene = gene_list[1:min(20, length(gene_list))]
+) %>%
+  kbl(caption = "Primeros 20 genes filtrados") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = FALSE) %>%
+  row_spec(0, bold = TRUE, color = "white", background = "#2ecc71")
+```
+
+### Genes de interés específicos
+
+Para nuestro análisis nos centraremos en los genes MECP2, IARS2 y GRN, previamente identificados en la literatura como causales de enfermedades representativas del fenotipo HP:0002344.
+
+```{r focus_genes}
+# Genes de interés principal
+focus_genes <- c("MECP2", "IARS2", "GRN")
+
+# Verificar presencia en la lista
+genes_present <- focus_genes %in% gene_list
+
+# Crear dataframe para mostrar
+verification_df <- data.frame(
+  Gen = focus_genes,
+  Estado = ifelse(genes_present, "✓ PRESENTE", "✗ AUSENTE"),
+  stringsAsFactors = FALSE
+)
+
+verification_df %>%
+  kbl(caption = "Verificación de genes de interés") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"),
+                full_width = FALSE) %>%
+  row_spec(0, bold = TRUE, color = "white", background = "#9b59b6") %>%
+  column_spec(2, bold = TRUE, 
+              color = ifelse(genes_present, "#27ae60", "#e74c3c"))
+```
+
+## Construcción de Red PPI con STRINGdb
+
+### Inicialización de STRINGdb
+
+Se inicializa la conexión con la base de datos STRING versión 12.0, estableciendo un umbral de confianza alto (≥0.7) para garantizar interacciones de alta calidad.
+
+```{r initialize_stringdb}
+# Inicializar STRINGdb
+# species = 9606 (Homo sapiens)
+# score_threshold = 700 (alta confianza, ≥0.7)
+string_db <- STRINGdb$new(species = 9606, 
+                          score_threshold = 700, 
+                          input_directory = "",
+                          version = "12.0")
+```
+
+<div class="alert alert-success">
+<strong>✓ STRINGdb inicializado correctamente</strong><br>
+<strong>Especie:</strong> Homo sapiens (NCBI tax ID: 9606)<br>
+<strong>Umbral de confianza:</strong> 0.70
+</div>
+
+### Mapeo de genes a identificadores STRING
+
+```{r map_genes_string}
+# Crear dataframe con nombres de genes
+genes_df <- data.frame(name = gene_list, stringsAsFactors = FALSE)
+
+# Mapear genes a identificadores STRING
+string_ids <- string_db$map(genes_df, "name", removeUnmappedRows = TRUE)
+
+# Crear resumen de mapeo
+mapping_summary <- data.frame(
+  Concepto = c("Genes mapeados exitosamente", "Genes no mapeados"),
+  Cantidad = c(nrow(string_ids), nrow(genes_df) - nrow(string_ids)),
+  Porcentaje = c(
+    paste0(round(100 * nrow(string_ids) / nrow(genes_df), 1), "%"),
+    paste0(round(100 * (nrow(genes_df) - nrow(string_ids)) / nrow(genes_df), 1), "%")
+  )
+)
+
+mapping_summary %>%
+  kbl(caption = "Resumen del mapeo de genes a STRING") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"),
+                full_width = FALSE) %>%
+  row_spec(0, bold = TRUE, color = "white", background = "#e67e22") %>%
+  row_spec(1, background = "#d5f4e6")
+```
+
+```{r show_mapping_examples}
+# Mostrar ejemplos de mapeo
+head(string_ids[, c("name", "STRING_id")], 10) %>%
+  kbl(caption = "Ejemplos de genes mapeados") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = FALSE) %>%
+  row_spec(0, bold = TRUE, color = "white", background = "#34495e")
+```
+
+### Obtención de interacciones proteína-proteína
+
+```{r get_interactions}
+# Obtener interacciones PPI desde STRING
+interaction_network <- string_db$get_interactions(string_ids$STRING_id)
+
+# Eliminar duplicados
+interaction_network <- unique(interaction_network[, 1:2])
+
+# Convertir IDs STRING a nombres de genes
+interaction_network$from <- string_ids$name[match(interaction_network$from, 
+                                                   string_ids$STRING_id)]
+interaction_network$to <- string_ids$name[match(interaction_network$to, 
+                                                 string_ids$STRING_id)]
+
+# Eliminar interacciones con NAs
+interaction_network <- interaction_network[complete.cases(interaction_network), ]
+```
+
+<div class="alert alert-success">
+<strong>✓ Interacciones obtenidas:</strong> `r nrow(interaction_network)` interacciones PPI
+</div>
+
+```{r show_interactions_table}
+head(interaction_network, 10) %>%
+  kbl(caption = "Primeras 10 interacciones proteína-proteína") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = FALSE) %>%
+  row_spec(0, bold = TRUE, color = "white", background = "#16a085")
+```
+
+### Estadísticas básicas de la red
+
+```{r network_basic_stats}
+# Crear lista de genes únicos en la red
+genes_in_network <- unique(c(interaction_network$from, interaction_network$to))
+
+# Calcular densidad
+network_density <- round(nrow(interaction_network) / (length(genes_in_network) * 
+                                   (length(genes_in_network) - 1) / 2), 4)
+
+# Crear dataframe de estadísticas
+network_stats <- data.frame(
+  Métrica = c("Número de nodos (genes)", "Número de aristas (interacciones)", "Densidad de red"),
+  Valor = c(length(genes_in_network), nrow(interaction_network), network_density)
+)
+
+network_stats %>%
+  kbl(caption = "Estadísticas básicas de la red PPI") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"),
+                full_width = FALSE) %>%
+  row_spec(0, bold = TRUE, color = "white", background = "#2c3e50") %>%
+  column_spec(1, bold = TRUE, width = "15em") %>%
+  column_spec(2, width = "10em")
+```
+
+## Análisis Estructural con igraph
+
+### Conversión a objeto igraph
+
+```{r create_igraph}
+# Crear objeto igraph a partir de la red de interacciones
+g <- graph_from_data_frame(interaction_network, directed = FALSE)
+
+# Simplificar grafo (eliminar loops y aristas múltiples)
+g <- simplify(g, remove.multiple = TRUE, remove.loops = TRUE)
+
+# Crear dataframe informativo
+graph_info <- data.frame(
+  Propiedad = c("Tipo de grafo", "Número de vértices", "Número de aristas"),
+  Valor = c(
+    ifelse(is_directed(g), "Dirigido", "No dirigido"),
+    vcount(g),
+    ecount(g)
+  )
+)
+
+graph_info %>%
+  kbl(caption = "Propiedades del grafo creado") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"),
+                full_width = FALSE) %>%
+  row_spec(0, bold = TRUE, color = "white", background = "#27ae60")
+```
+
+### Cálculo de métricas topológicas
+
+```{r calculate_metrics}
+# Grado de nodos
+degree_vals <- degree(g)
+
+# Centralidad de intermediación (betweenness)
+betweenness_vals <- betweenness(g, normalized = TRUE)
+
+# Centralidad de cercanía (closeness)
+closeness_vals <- closeness(g, normalized = TRUE)
+
+# Coeficiente de agrupamiento (clustering coefficient)
+clustering_vals <- transitivity(g, type = "local")
+clustering_vals[is.na(clustering_vals)] <- 0
+
+# Crear dataframe con métricas
+node_metrics <- data.frame(
+  gene = V(g)$name,
+  degree = degree_vals,
+  betweenness = round(betweenness_vals, 4),
+  closeness = round(closeness_vals, 4),
+  clustering = round(clustering_vals, 4)
+)
+
+# Ordenar por grado (de mayor a menor)
+node_metrics <- node_metrics[order(-node_metrics$degree), ]
+```
+
+```{r show_top_hubs}
+head(node_metrics, 10) %>%
+  kbl(caption = "Top 10 genes por grado (Hubs de la red)",
+      col.names = c("Gen", "Grado", "Betweenness", "Closeness", "Clustering")) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = FALSE) %>%
+  row_spec(0, bold = TRUE, color = "white", background = "#c0392b") %>%
+  column_spec(1, bold = TRUE) %>%
+  column_spec(2, color = "white", background = "#e74c3c", bold = TRUE)
+```
+
+### Métricas globales de la red
+
+```{r global_metrics}
+# Diámetro de la red
+diameter_val <- diameter(g, directed = FALSE)
+
+# Camino medio más corto
+avg_path_length <- mean_distance(g, directed = FALSE)
+
+# Coeficiente de agrupamiento global
+global_clustering <- transitivity(g, type = "global")
+
+# Modularidad (usando algoritmo Louvain)
+louvain_clusters <- cluster_louvain(g)
+modularity_val <- modularity(louvain_clusters)
+
+# Densidad de la red
+density_val <- edge_density(g)
+
+# Número de componentes
+n_components <- components(g)$no
+
+# Crear dataframe de métricas globales
+global_metrics_df <- data.frame(
+  Métrica = c(
+    "Diámetro de la red",
+    "Longitud promedio de camino más corto",
+    "Coeficiente de agrupamiento global",
+    "Modularidad (Louvain)",
+    "Densidad de la red",
+    "Número de componentes conectados"
+  ),
+  Valor = c(
+    diameter_val,
+    round(avg_path_length, 3),
+    round(global_clustering, 3),
+    round(modularity_val, 3),
+    round(density_val, 4),
+    n_components
+  )
+)
+
+global_metrics_df %>%
+  kbl(caption = "Métricas globales de la red") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"),
+                full_width = FALSE) %>%
+  row_spec(0, bold = TRUE, color = "white", background = "#8e44ad") %>%
+  column_spec(1, bold = TRUE, width = "20em") %>%
+  column_spec(2, width = "8em", color = "white", background = "#9b59b6")
+```
+
+### Distribución de grado
+
+```{r degree_distribution, fig.height=5, fig.width=8}
+# Histograma de distribución de grado
+hist(degree_vals, 
+     breaks = 30,
+     col = "steelblue",
+     border = "white",
+     main = "Distribución de grado en la red PPI",
+     xlab = "Grado (número de conexiones)",
+     ylab = "Frecuencia",
+     las = 1)
+
+# Estadísticas descriptivas del grado
+degree_stats <- data.frame(
+  Estadística = c("Grado mínimo", "Grado máximo", "Grado medio", "Grado mediano"),
+  Valor = c(
+    min(degree_vals),
+    max(degree_vals),
+    round(mean(degree_vals), 2),
+    median(degree_vals)
+  )
+)
+
+degree_stats %>%
+  kbl(caption = "Estadísticas de distribución de grado") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"),
+                full_width = FALSE) %>%
+  row_spec(0, bold = TRUE, color = "white", background = "#3498db")
+```
+
+## Visualización de la Red
+
+### Visualización básica (layout Fruchterman-Reingold)
+
+```{r plot_fr_layout, fig.height=8, fig.width=10}
+set.seed(123)
+
+# Layout Fruchterman-Reingold
+layout_fr <- layout_with_fr(g)
+
+# Asignar tamaño de nodos según grado
+vertex_size <- log(degree_vals + 1) * 3
+
+# Plot
+plot(g, 
+     layout = layout_fr,
+     vertex.size = vertex_size,
+     vertex.color = "skyblue",
+     vertex.frame.color = "gray50",
+     vertex.label = NA,
+     edge.width = 0.5,
+     edge.color = "gray70",
+     main = "Red PPI - HP:0002344 (Fruchterman-Reingold)")
+```
+
+### Visualización destacando genes de interés
+
+```{r plot_focus_genes, fig.height=8, fig.width=10}
+set.seed(123)
+
+# Identificar genes de interés en la red
+focus_in_network <- focus_genes[focus_genes %in% V(g)$name]
+
+# Crear vector de colores
+vertex_colors <- rep("gray80", vcount(g))
+vertex_colors[V(g)$name %in% focus_in_network] <- "red"
+
+# Crear vector de etiquetas (solo para genes de interés)
+vertex_labels <- rep(NA, vcount(g))
+vertex_labels[V(g)$name %in% focus_in_network] <- V(g)$name[V(g)$name %in% focus_in_network]
+
+# Plot
+plot(g,
+     layout = layout_fr,
+     vertex.size = vertex_size,
+     vertex.color = vertex_colors,
+     vertex.frame.color = "gray30",
+     vertex.label = vertex_labels,
+     vertex.label.cex = 1.2,
+     vertex.label.color = "black",
+     vertex.label.font = 2,
+     edge.width = 0.5,
+     edge.color = "gray70",
+     main = "Red PPI - Genes de Interés (MECP2, IARS2, GRN)")
+```
+
+### Visualización con ggraph
+
+```{r plot_ggraph, fig.height=10, fig.width=12}
+# Convertir a tidygraph
+g_tidy <- as_tbl_graph(g) %>%
+  activate(nodes) %>%
+  mutate(
+    degree = degree_vals,
+    focus = name %in% focus_in_network
+  )
+
+# Plot con ggraph
+ggraph(g_tidy, layout = 'fr') +
+  geom_edge_link(alpha = 0.2, color = "gray70") +
+  geom_node_point(aes(size = degree, color = focus), alpha = 0.8) +
+  scale_color_manual(values = c("FALSE" = "skyblue", "TRUE" = "red"),
+                     labels = c("Otros genes", "MECP2/IARS2/GRN")) +
+  scale_size_continuous(range = c(2, 10)) +
+  labs(title = "Red PPI - HP:0002344: Progressive neurologic deterioration",
+       subtitle = "Visualización con ggraph",
+       color = "Tipo de gen",
+       size = "Grado") +
+  theme_graph() +
+  theme(legend.position = "bottom")
+```
+
+## Detección de Comunidades
+
+### Algoritmo de Louvain
+
+```{r clustering_louvain}
+set.seed(123)
+
+# Clustering con Louvain
+louvain_communities <- cluster_louvain(g)
+
+# Número de comunidades
+n_communities_louvain <- length(unique(membership(louvain_communities)))
+
+# Crear resumen
+louvain_summary <- data.frame(
+  Métrica = c("Número de comunidades detectadas", "Modularidad"),
+  Valor = c(n_communities_louvain, round(modularity(louvain_communities), 3))
+)
+
+louvain_summary %>%
+  kbl(caption = "Clustering Louvain - Resumen") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"),
+                full_width = FALSE) %>%
+  row_spec(0, bold = TRUE, color = "white", background = "#e74c3c")
+
+# Tabla de tamaños de comunidades
+community_sizes_table <- as.data.frame(table(membership(louvain_communities)))
+colnames(community_sizes_table) <- c("Comunidad", "Número de genes")
+
+community_sizes_table %>%
+  kbl(caption = "Tamaños de las comunidades (Louvain)") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = FALSE) %>%
+  row_spec(0, bold = TRUE, color = "white", background = "#34495e")
+```
+
+```{r plot_louvain, fig.height=8, fig.width=10}
+set.seed(123)
+
+# Visualización de comunidades Louvain
+plot(louvain_communities, g,
+     vertex.size = 5,
+     vertex.label = NA,
+     edge.width = 0.5,
+     main = "Detección de Comunidades - Algoritmo Louvain")
+```
+
+### Algoritmo Walktrap
+
+```{r clustering_walktrap}
+set.seed(123)
+
+# Clustering con Walktrap
+walktrap_communities <- cluster_walktrap(g, steps = 4)
+
+# Número de comunidades
+n_communities_walktrap <- length(unique(membership(walktrap_communities)))
+
+# Crear resumen
+walktrap_summary <- data.frame(
+  Métrica = c("Número de comunidades detectadas", "Modularidad"),
+  Valor = c(n_communities_walktrap, round(modularity(walktrap_communities), 3))
+)
+
+walktrap_summary %>%
+  kbl(caption = "Clustering Walktrap - Resumen") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"),
+                full_width = FALSE) %>%
+  row_spec(0, bold = TRUE, color = "white", background = "#16a085")
+
+# Tabla de tamaños de comunidades
+walktrap_sizes_table <- as.data.frame(table(membership(walktrap_communities)))
+colnames(walktrap_sizes_table) <- c("Comunidad", "Número de genes")
+
+walktrap_sizes_table %>%
+  kbl(caption = "Tamaños de las comunidades (Walktrap)") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = FALSE) %>%
+  row_spec(0, bold = TRUE, color = "white", background = "#1abc9c")
+```
+
+```{r plot_walktrap, fig.height=8, fig.width=10}
+set.seed(123)
+
+# Visualización de comunidades Walktrap
+plot(walktrap_communities, g,
+     vertex.size = 5,
+     vertex.label = NA,
+     edge.width = 0.5,
+     main = "Detección de Comunidades - Algoritmo Walktrap")
+```
+
+### Comunidades solapadas con K-clique
+
+```{r kclique_analysis, fig.height=8, fig.width=10}
+set.seed(123)
+
+# Detección de comunidades solapadas usando k-clique percolation (k=3)
+cliques_list <- cliques(g, min = 3)
+
+# Crear resumen
+kclique_summary <- data.frame(
+  Métrica = c("Número de cliques (k>=3)", "Número de nodos", "Número de aristas"),
+  Valor = c(length(cliques_list), vcount(g), ecount(g))
+)
+
+kclique_summary %>%
+  kbl(caption = "Comunidades solapadas (K-clique percolation) - Resumen") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"),
+                full_width = FALSE) %>%
+  row_spec(0, bold = TRUE, color = "white", background = "#f39c12")
+
+# Identificar nodos que pertenecen a múltiples cliques (solapamiento)
+node_clique_membership <- sapply(V(g)$name, function(node) {
+  sum(sapply(cliques_list, function(clique) node %in% names(clique)))
+})
+
+# Top 10 nodos con mayor solapamiento
+top_overlap <- head(sort(node_clique_membership, decreasing = TRUE), 10)
+overlap_df <- data.frame(
+  Gen = names(top_overlap),
+  `Número de cliques` = as.numeric(top_overlap)
+)
+
+overlap_df %>%
+  kbl(caption = "Top 10 nodos con mayor solapamiento entre cliques") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = FALSE) %>%
+  row_spec(0, bold = TRUE, color = "white", background = "#e67e22") %>%
+  column_spec(1, bold = TRUE)
+
+# Visualización: resaltar nodos con mayor solapamiento
+vertex_colors <- colorRampPalette(c("lightblue", "red"))(10)
+overlap_quantiles <- cut(node_clique_membership, breaks = 10, labels = FALSE)
+overlap_quantiles[is.na(overlap_quantiles)] <- 1
+
+plot(g,
+     vertex.size = 5,
+     vertex.color = vertex_colors[overlap_quantiles],
+     vertex.label = NA,
+     edge.width = 0.5,
+     main = "Comunidades Solapadas (K-clique) - Color indica solapamiento")
+```
+
+### Análisis de genes por comunidad (Louvain)
+
+```{r genes_by_community}
+# Asignar comunidades a genes
+community_membership <- membership(louvain_communities)
+
+# Separar genes por comunidad
+genes_by_community <- split(V(g)$name, community_membership)
+
+# Ordenar comunidades por tamaño
+community_sizes <- sapply(genes_by_community, length)
+top_communities <- order(-community_sizes)[1:min(3, length(community_sizes))]
+```
+
+<div class="alert alert-info">
+<strong>ℹ Análisis de genes por comunidad</strong><br>
+Se muestran las 3 comunidades más grandes detectadas por el algoritmo de Louvain
+</div>
+
+```{r show_communities_genes}
+for(i in top_communities){
+  cat(paste0("\n#### Comunidad ", i, " (", length(genes_by_community[[i]]), " genes)\n\n"))
+  
+  # Mostrar genes en formato de tabla
+  genes_df <- data.frame(
+    Index = 1:length(genes_by_community[[i]]),
+    Gen = genes_by_community[[i]]
+  )
+  
+  print(
+    genes_df %>%
+      kbl() %>%
+      kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                    full_width = FALSE) %>%
+      row_spec(0, bold = TRUE, color = "white", background = "#95a5a6")
+  )
+  cat("\n\n")
+}
+```
+
+## Análisis de Genes de Interés
+
+### Subred de MECP2
+
+```{r mecp2_subnetwork, fig.height=7, fig.width=9}
+if("MECP2" %in% V(g)$name){
+  # Obtener vecinos de MECP2
+  mecp2_neighbors <- neighbors(g, "MECP2")
+  
+  # Crear subgrafo
+  mecp2_subgraph <- induced_subgraph(g, c("MECP2", names(mecp2_neighbors)))
+  
+  # Crear resumen
+  mecp2_summary <- data.frame(
+    Métrica = c("Nodos en subred", "Aristas en subred"),
+    Valor = c(vcount(mecp2_subgraph), ecount(mecp2_subgraph))
+  )
+  
+  mecp2_summary %>%
+    kbl(caption = "Subred MECP2 - Resumen") %>%
+    kable_styling(bootstrap_options = c("striped", "hover"),
+                  full_width = FALSE) %>%
+    row_spec(0, bold = TRUE, color = "white", background = "#3498db")
+  
+  # Mostrar genes vecinos
+  neighbors_df <- data.frame(
+    Index = 1:length(names(mecp2_neighbors)),
+    Gen_vecino = names(mecp2_neighbors)
+  )
+  
+  neighbors_df %>%
+    kbl(caption = "Genes vecinos de MECP2") %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                  full_width = FALSE) %>%
+    row_spec(0, bold = TRUE, color = "white", background = "#2980b9")
+  
+  # Visualización
+  set.seed(123)
+  plot(mecp2_subgraph,
+       vertex.size = 10,
+       vertex.color = ifelse(V(mecp2_subgraph)$name == "MECP2", "red", "lightblue"),
+       vertex.label.cex = 0.8,
+       vertex.label.color = "black",
+       edge.width = 2,
+       edge.color = "gray50",
+       main = "Subred de MECP2 y sus interacciones directas")
+} else {
+  cat('<div class="alert alert-warning">\n')
+  cat('<strong>⚠ MECP2 no encontrado en la red.</strong>\n')
+  cat('</div>\n')
+}
+```
+
+### Subred de IARS2
+
+```{r iars2_subnetwork, fig.height=7, fig.width=9}
+if("IARS2" %in% V(g)$name){
+  # Obtener vecinos de IARS2
+  iars2_neighbors <- neighbors(g, "IARS2")
+  
+  # Crear subgrafo
+  iars2_subgraph <- induced_subgraph(g, c("IARS2", names(iars2_neighbors)))
+  
+  # Crear resumen
+  iars2_summary <- data.frame(
+    Métrica = c("Nodos en subred", "Aristas en subred"),
+    Valor = c(vcount(iars2_subgraph), ecount(iars2_subgraph))
+  )
+  
+  iars2_summary %>%
+    kbl(caption = "Subred IARS2 - Resumen") %>%
+    kable_styling(bootstrap_options = c("striped", "hover"),
+                  full_width = FALSE) %>%
+    row_spec(0, bold = TRUE, color = "white", background = "#2ecc71")
+  
+  # Mostrar genes vecinos
+  neighbors_df <- data.frame(
+    Index = 1:length(names(iars2_neighbors)),
+    Gen_vecino = names(iars2_neighbors)
+  )
+  
+  neighbors_df %>%
+    kbl(caption = "Genes vecinos de IARS2") %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                  full_width = FALSE) %>%
+    row_spec(0, bold = TRUE, color = "white", background = "#27ae60")
+  
+  # Visualización
+  set.seed(123)
+  plot(iars2_subgraph,
+       vertex.size = 10,
+       vertex.color = ifelse(V(iars2_subgraph)$name == "IARS2", "red", "lightgreen"),
+       vertex.label.cex = 0.8,
+       vertex.label.color = "black",
+       edge.width = 2,
+       edge.color = "gray50",
+       main = "Subred de IARS2 y sus interacciones directas")
+} else {
+  cat('<div class="alert alert-warning">\n')
+  cat('<strong>⚠ IARS2 no encontrado en la red.</strong>\n')
+  cat('</div>\n')
+}
+```
+
+### Subred de GRN
+
+```{r grn_subnetwork, fig.height=7, fig.width=9}
+if("GRN" %in% V(g)$name){
+  # Obtener vecinos de GRN
+  grn_neighbors <- neighbors(g, "GRN")
+  
+  # Crear subgrafo
+  grn_subgraph <- induced_subgraph(g, c("GRN", names(grn_neighbors)))
+  
+  # Crear resumen
+  grn_summary <- data.frame(
+    Métrica = c("Nodos en subred", "Aristas en subred"),
+    Valor = c(vcount(grn_subgraph), ecount(grn_subgraph))
+  )
+  
+  grn_summary %>%
+    kbl(caption = "Subred GRN - Resumen") %>%
+    kable_styling(bootstrap_options = c("striped", "hover"),
+                  full_width = FALSE) %>%
+    row_spec(0, bold = TRUE, color = "white", background = "#f39c12")
+  
+  # Mostrar genes vecinos
+  neighbors_df <- data.frame(
+    Index = 1:length(names(grn_neighbors)),
+    Gen_vecino = names(grn_neighbors)
+  )
+  
+  neighbors_df %>%
+    kbl(caption = "Genes vecinos de GRN") %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                  full_width = FALSE) %>%
+    row_spec(0, bold = TRUE, color = "white", background = "#e67e22")
+  
+  # Visualización
+  set.seed(123)
+  plot(grn_subgraph,
+       vertex.size = 10,
+       vertex.color = ifelse(V(grn_subgraph)$name == "GRN", "red", "lightyellow"),
+       vertex.label.cex = 0.8,
+       vertex.label.color = "black",
+       edge.width = 2,
+       edge.color = "gray50",
+       main = "Subred de GRN y sus interacciones directas")
+} else {
+  cat('<div class="alert alert-warning">\n')
+  cat('<strong>⚠ GRN no encontrado en la red.</strong>\n')
+  cat('</div>\n')
+}
+```
+
+## Enriquecimiento Funcional
+
+### Enriquecimiento GO de toda la red
+
+```{r enrichment_full_network}
+# Análisis de enriquecimiento GO para todos los genes de la red
+enrich_all <- enrichGO(
+  gene          = V(g)$name,
+  OrgDb         = org.Hs.eg.db,
+  keyType       = "SYMBOL",
+  ont           = "BP",
+  pAdjustMethod = "BH",
+  pvalueCutoff  = 0.05,
+  qvalueCutoff  = 0.2
+)
+```
+
+<div class="alert alert-success">
+<strong>✓ Análisis de enriquecimiento GO completado</strong><br>
+<strong>Términos GO significativos:</strong> `r nrow(as.data.frame(enrich_all))`
+</div>
+
+```{r show_go_enrichment}
+if(nrow(as.data.frame(enrich_all)) > 0){
+  head(as.data.frame(enrich_all)[, c("ID", "Description", "pvalue", "Count")], 10) %>%
+    kbl(caption = "Top 10 procesos biológicos enriquecidos",
+        col.names = c("ID GO", "Descripción", "p-valor", "Genes")) %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                  full_width = FALSE) %>%
+    row_spec(0, bold = TRUE, color = "white", background = "#27ae60") %>%
+    column_spec(3, color = "white", background = "#2ecc71", bold = TRUE)
+} else {
+  cat('<div class="alert alert-warning">\n')
+  cat('<strong>⚠ No se encontraron términos GO significativamente enriquecidos.</strong>\n')
+  cat('</div>\n')
+}
+```
+
+```{r plot_enrichment_all, fig.height=8, fig.width=10}
+if(nrow(as.data.frame(enrich_all)) > 0){
+  # Dotplot
+  dotplot(enrich_all, showCategory = 15, 
+          title = "Enriquecimiento GO - HP:0002344")
+}
+```
+
+```{r barplot_enrichment, fig.height=8, fig.width=10}
+if(nrow(as.data.frame(enrich_all)) > 0){
+  # Barplot
+  barplot(enrich_all, showCategory = 15,
+          title = "Top 15 Procesos Biológicos Enriquecidos")
+}
+```
+
+### Enriquecimiento por comunidad
+
+```{r enrichment_by_community}
+# Análisis de enriquecimiento para cada comunidad
+enrichment_by_community <- list()
+
+for(i in seq_along(genes_by_community)){
+  if(length(genes_by_community[[i]]) >= 5){  # Mínimo 5 genes
+    tryCatch({
+      enrichment_by_community[[i]] <- enrichGO(
+        gene          = genes_by_community[[i]],
+        OrgDb         = org.Hs.eg.db,
+        keyType       = "SYMBOL",
+        ont           = "BP",
+        pAdjustMethod = "BH",
+        pvalueCutoff  = 0.05,
+        qvalueCutoff  = 0.2
+      )
+    }, error = function(e){
+      # Silent error handling
+    })
+  }
+}
+```
+
+```{r show_community_enrichment}
+for(i in seq_along(enrichment_by_community)){
+  if(!is.null(enrichment_by_community[[i]]) && 
+     nrow(as.data.frame(enrichment_by_community[[i]])) > 0){
+    
+    cat(paste0("\n#### Comunidad ", i, "\n\n"))
+    cat(paste0('<div class="alert alert-info">\n'))
+    cat(paste0('<strong>Términos GO significativos:</strong> ', 
+               nrow(as.data.frame(enrichment_by_community[[i]])), '\n'))
+    cat('</div>\n\n')
+    
+    print(
+      head(as.data.frame(enrichment_by_community[[i]])[, 
+                               c("Description", "pvalue", "Count")], 5) %>%
+        kbl(col.names = c("Descripción", "p-valor", "Genes")) %>%
+        kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                      full_width = FALSE) %>%
+        row_spec(0, bold = TRUE, color = "white", background = "#9b59b6")
+    )
+    cat("\n\n")
+  }
+}
+```
+
+```{r plot_community_enrichment, fig.height=7, fig.width=10}
+# Visualizar enriquecimiento de la comunidad más grande
+largest_community <- which.max(community_sizes)
+
+if(!is.null(enrichment_by_community[[largest_community]]) &&
+   nrow(as.data.frame(enrichment_by_community[[largest_community]])) > 0){
+  
+  dotplot(enrichment_by_community[[largest_community]], 
+          showCategory = 10,
+          title = paste("Enriquecimiento GO - Comunidad", largest_community))
+}
+```
+
+### Enriquecimiento KEGG
+
+```{r enrichment_kegg}
+# Convertir símbolos a Entrez IDs
+gene_entrez <- bitr(V(g)$name, 
+                    fromType = "SYMBOL",
+                    toType = "ENTREZID",
+                    OrgDb = org.Hs.eg.db)
+
+# Análisis KEGG
+enrich_kegg <- enrichKEGG(
+  gene         = gene_entrez$ENTREZID,
+  organism     = 'hsa',
+  pvalueCutoff = 0.05,
+  qvalueCutoff = 0.2
+)
+```
+
+<div class="alert alert-success">
+<strong>✓ Análisis de enriquecimiento KEGG completado</strong><br>
+<strong>Vías KEGG significativas:</strong> `r nrow(as.data.frame(enrich_kegg))`
+</div>
+
+```{r show_kegg_enrichment}
+if(nrow(as.data.frame(enrich_kegg)) > 0){
+  head(as.data.frame(enrich_kegg)[, c("ID", "Description", "pvalue", "Count")], 10) %>%
+    kbl(caption = "Top 10 vías KEGG enriquecidas",
+        col.names = c("ID KEGG", "Descripción", "p-valor", "Genes")) %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                  full_width = FALSE) %>%
+    row_spec(0, bold = TRUE, color = "white", background = "#e74c3c") %>%
+    column_spec(3, color = "white", background = "#c0392b", bold = TRUE)
+}
+```
+
+```{r plot_kegg, fig.height=7, fig.width=10}
+if(nrow(as.data.frame(enrich_kegg)) > 0){
+  dotplot(enrich_kegg, showCategory = 15,
+          title = "Enriquecimiento KEGG - HP:0002344")
+}
+```
+
+## Exportación de Resultados
+
+Los resultados han sido procesados y están listos para su análisis. Los archivos de exportación incluyen:
+
+- Métricas de nodos (centralidad, grado, clustering)
+- Resultados de enriquecimiento GO y KEGG
+- Redes en formatos GraphML y GML
+
+```{r export_files, eval=FALSE, include=FALSE}
+# Guardar métricas de nodos
+write.csv(node_metrics, file = "node_metrics_HP0002344.csv", row.names = FALSE)
+
+# Guardar enriquecimiento GO
+if(nrow(as.data.frame(enrich_all)) > 0){
+  write.csv(as.data.frame(enrich_all), file = "GO_enrichment_full_network.csv", row.names = FALSE)
+}
+
+# Guardar enriquecimiento KEGG
+if(nrow(as.data.frame(enrich_kegg)) > 0){
+  write.csv(as.data.frame(enrich_kegg), file = "KEGG_enrichment_full_network.csv", row.names = FALSE)
+}
+
+# Guardar red
+write_graph(g, "network_HP0002344.graphml", format = "graphml")
+write_graph(g, "network_HP0002344.gml", format = "gml")
+write.csv(interaction_network, file = "edgelist_HP0002344.csv", row.names = FALSE)
+```
+
+# Resumen de Resultados
+
+```{r summary_results}
+# Crear dataframe de resumen
+summary_df <- data.frame(
+  Categoría = c(
+    "Fenotipo HPO",
+    "Genes totales identificados",
+    "Genes en la red PPI",
+    "Interacciones PPI",
+    "Comunidades detectadas (Louvain)",
+    "Modularidad de la red",
+    "Grado medio",
+    "Clustering global",
+    "Términos GO enriquecidos",
+    "Vías KEGG enriquecidas"
+  ),
+  Valor = c(
+    paste(hpo_id, "- Progressive neurologic deterioration"),
+    length(gene_list),
+    vcount(g),
+    ecount(g),
+    n_communities_louvain,
+    round(modularity_val, 3),
+    round(mean(degree_vals), 2),
+    round(global_clustering, 3),
+    nrow(as.data.frame(enrich_all)),
+    nrow(as.data.frame(enrich_kegg))
+  )
+)
+
+summary_df %>%
+  kbl(caption = "Resumen del análisis completo") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"),
+                full_width = FALSE) %>%
+  row_spec(0, bold = TRUE, color = "white", background = "#2c3e50") %>%
+  column_spec(1, bold = TRUE, width = "18em") %>%
+  column_spec(2, width = "15em")
+
+# Estado de genes de interés
+genes_status <- data.frame(
+  Gen = focus_genes,
+  Estado = ifelse(focus_genes %in% V(g)$name, "✓ PRESENTE", "✗ AUSENTE"),
+  Grado = ifelse(focus_genes %in% V(g)$name, 
+                 degree(g, focus_genes[focus_genes %in% V(g)$name]), 
+                 NA)
+)
+
+genes_status %>%
+  kbl(caption = "Estado de genes de interés en la red") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"),
+                full_width = FALSE) %>%
+  row_spec(0, bold = TRUE, color = "white", background = "#8e44ad") %>%
+  column_spec(2, bold = TRUE,
+              color = ifelse(genes_status$Estado == "✓ PRESENTE", "#27ae60", "#e74c3c"))
+```
+
+# Información del Entorno
+
+```{r session_info, echo=FALSE}
+sessionInfo()
+```
+
+---
+
+**Análisis completado:** `r Sys.Date()`
+
+**Repositorio:** [GitHub - Análisis HP:0002344](https://github.com/anubis-ai-agency/HP0002344-analysis)
