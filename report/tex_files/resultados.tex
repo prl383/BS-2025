@@ -1,2 +1,90 @@
-
 \section{Resultados}
+
+\subsection{Red PPI asociada al fenotipo HP:0002344}
+
+La consulta al término HP:0002344 en la Human Phenotype Ontology produjo un conjunto inicial de \textbf{XX genes} asociados al fenotipo. Tras la depuración de duplicados y el mapeo en STRINGdb, \textbf{XX genes} fueron identificados correctamente y empleados para la construcción de la red PPI.
+
+La red final incluyó un total de \textbf{XX nodos} y \textbf{XX interacciones} con un umbral de confianza de 0.7 (combined score $\geq$ 700). La densidad obtenida fue de \textbf{X.XXX}, con un grado medio de \textbf{X.X}. La Tabla~\ref{tab:metricas_globales} resume las métricas topológicas principales de la red.
+
+%\begin{figure}[H]
+%	\centering
+%	\includegraphics[width=0.85\linewidth]{FIGURA_PPI.png}
+%	\caption{Red PPI construida a partir de los genes asociados a HP:0002344 tras el filtrado de interacciones de alta confianza. Los nodos representan genes y las aristas interacciones proteína--proteína.}
+%	\label{fig:ppi}
+%\end{figure}
+%
+%\begin{table}[H]
+%	\centering
+%	\caption{Métricas topológicas globales de la red PPI.}
+%	\label{tab:metricas_globales}
+%	\begin{tabular}{l c}
+%		\hline
+%		Métrica & Valor \\
+%		\hline
+%		Número de nodos & XX \\
+%		Número de aristas & XX \\
+%		Densidad & X.XXX \\
+%		Grado medio & X.X \\
+%		Coeficiente de agrupamiento global & X.XXX \\
+%		Moduralidad (Louvain) & X.XXX \\
+%		\hline
+%	\end{tabular}
+%\end{table}
+
+\subsection{Distribución de grados y nodos altamente conectados}
+
+La distribución de grados mostró valores comprendidos entre \textbf{X} y \textbf{X}. El nodo con mayor conectividad presentó un grado de \textbf{X}. El histograma de grados obtenido se presenta en la Figura~\ref{fig:histograma_grado}.
+
+%\begin{figure}[H]
+%	\centering
+%	\includegraphics[width=0.75\linewidth]{FIGURA_HISTOGRAMA_GRADOS.png}
+%	\caption{Distribución de grados de la red PPI. El eje X representa el grado y el eje Y la frecuencia.}
+%	\label{fig:histograma_grado}
+%\end{figure}
+
+\subsection{Detección de comunidades}
+
+La aplicación del algoritmo Louvain detectó un total de \textbf{X comunidades}, con un valor de modularidad de \textbf{X.XXX}. Por su parte, el algoritmo Walktrap identificó \textbf{X comunidades}, alcanzando una modularidad de \textbf{X.XXX}. La Figura~\ref{fig:louvain} muestra la partición obtenida mediante Louvain y la Figura~\ref{fig:walktrap} representa la partición correspondiente a Walktrap.
+
+%\begin{figure}[H]
+%	\centering
+%	\includegraphics[width=0.8\linewidth]{FIGURA_LOUVAIN.png}
+%	\caption{Partición comunitaria generada mediante el algoritmo Louvain. Los colores representan comunidades distintas.}
+%	\label{fig:louvain}
+%\end{figure}
+%
+%\begin{figure}[H]
+%	\centering
+%	\includegraphics[width=0.8\linewidth]{FIGURA_WALKTRAP.png}
+%	\caption{Partición comunitaria generada mediante el algoritmo Walktrap. Los colores representan comunidades distintas.}
+%	\label{fig:walktrap}
+%\end{figure}
+
+\subsection{Métricas individuales y genes de interés}
+
+Las métricas de grado, centralidad de intermediación, cercanía y coeficiente de agrupamiento se calcularon para cada nodo de la red. La Tabla~\ref{tab:metricas_individuales} resume estos valores.
+
+%\begin{table}[H]
+%	\centering
+%	\caption{Métricas topológicas individuales de los genes analizados.}
+%	\label{tab:metricas_individuales}
+%	\begin{tabular}{l c c c c}
+%		\hline
+%		Gen & Grado & Betweenness & Closeness & Clustering \\
+%		\hline
+%		MECP2 & X & X.XXX & X.XXX & X.XXX \\
+%		IARS2 & X & X.XXX & X.XXX & X.XXX \\
+%		GRN   & X & X.XXX & X.XXX & X.XXX \\
+%		\hline
+%	\end{tabular}
+%\end{table}
+
+Se generaron subredes de vecindad inmediata (orden 1) para los genes \textit{MECP2}, \textit{IARS2} y \textit{GRN}. La Figura~\ref{fig:ego_mecp2} muestra la subred de MECP2 y las Figuras~\ref{fig:ego_iars2} y~\ref{fig:ego_grn} las correspondientes a los otros genes.
+%
+%\begin{figure}[H]
+%	\centering
+%	\includegraphics[width=0.8\linewidth]{FIGURA_EGO_MECP2.png}
+%	\caption{Subred de vecindad de orden 1 del gen \textit{MECP2}.}
+%	\label{fig:ego_mecp2}
+%\end{figure}
+
